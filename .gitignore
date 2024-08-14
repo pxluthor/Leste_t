@@ -1,0 +1,8 @@
+.streamlit/
+arquivos/
+chunks/
+mp3-files/
+chat_unico.py
+speechrecognition.py
+env/
+__pycache__/

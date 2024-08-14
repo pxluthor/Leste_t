@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Áudios</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <style>
+        .transcription {
+            display: none; /* Inicialmente, a transcrição está oculta */
+            margin-top: 10px;
+        }
+        .transcription-link {
+            cursor: pointer;
+            color: blue;
+            text-decoration: underline;
+        }
+        .analysis {
+            display: none; /* Inicialmente, a análise está oculta */
+            margin-top: 10px;
+        }
+        .analysis-link {
+            cursor: pointer;
+            color: green;
+            text-decoration: underline;
+        }
+    </style>
+    <script>
+        function toggleTranscription(id) {
+            var transcriptionElement = document.getElementById('transcription-' + id);
+            var linkElement = document.getElementById('link-' + id);
+            if (transcriptionElement.style.display === "none") {
+                transcriptionElement.style.display = "block";
+                linkElement.textContent = "Ocultar Transcrição";
+            } else {
+                transcriptionElement.style.display = "none";
+                linkElement.textContent = "Ver Transcrição";
+            }
+        }
+
+        function toggleAnalysis(id) {
+            var analysisElement = document.getElementById('analysis-' + id);
+            var linkElement = document.getElementById('analysis-link-' + id);
+            if (analysisElement.style.display === "none") {
+                analysisElement.style.display = "block";
+                linkElement.textContent = "Ocultar Análise";
+            } else {
+                analysisElement.style.display = "none";
+                linkElement.textContent = "Ver Análise";
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Lista de Áudios</h1>
+        <ul class="list-group">
+            {% for audio in audios %}
+                <li class="list-group-item">
+                    <strong>Arquivo:</strong> 
+                    <a href="{{ url_for('transcrever_audio', audio_id=audio.id) }}">{{ audio.filename }}</a> 
+                    ({{ audio.format }}, {{ audio.duration }}s)
+                    <br>
+                    {% if audio.transcription %}
+                        <span id="link-{{ audio.id }}" class="transcription-link" onclick="toggleTranscription('{{ audio.id }}')">
+                            Ver Transcrição
+                        </span>
+                        <div id="transcription-{{ audio.id }}" class="transcription">
+                            <p>{{ audio.transcription }}</p>
+                            <a href="{{ url_for('download_pdf', filename=audio.transcription_path.replace('\\', '/').split('/')[-1]) }}" download>Clique aqui para baixar a transcrição</a>
+                        </div>
+                        <br>
+                        {% if audio.analysis %}
+                            <span id="analysis-link-{{ audio.id }}" class="analysis-link" onclick="toggleAnalysis('{{ audio.id }}')">
+                                Ver Análise
+                            </span>
+                            <div id="analysis-{{ audio.id }}" class="analysis">
+                                <p>{{ audio.analysis }}</p>
+                            </div>
+                        {% else %}
+                            <a href="{{ url_for('analisar_transcricao', audio_id=audio.id) }}" class="analysis-link">                                
+                                Gerar Análise
+                            </a>
+                        {% endif %}
+                    {% else %}
+                        <em>Transcrição não disponível. Clique no nome do arquivo para transcrever.</em>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>
