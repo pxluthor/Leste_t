@@ -1,26 +1,33 @@
-# API flask transcrição de audio 
+# API flask transcrição de audio com acesso ao banco de daddos Mysql.
 
 
+import os
 from flask import Flask, request, jsonify, render_template
+import requests
+
 from flask import send_from_directory
 import pymysql
 from fpdf import FPDF
-import os
+
 from groq import Groq
 import assemblyai as aai
-import requests
+
 from pydub import AudioSegment
+import speech_recognition as sr
+
 
 app = Flask(__name__)
 
+
 app.config['UPLOAD_FOLDER'] = 'transcricoes' 
-GROQ_API_KEY = ""# colocar a chave
+GROQ_API_KEY = "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"# colocar a chave
 client = Groq(api_key=GROQ_API_KEY)
 
 
 # Configuração da API AssemblyAI
-ASSEMBLYAI_API_KEY = "" # colocar a chave
+ASSEMBLYAI_API_KEY = "0dd6e4398bb34fca86494411ff025f07" # colocar a chave
 aai.settings.api_key = ASSEMBLYAI_API_KEY
+ # Diretório onde os PDFs estão armazenados
 
 # Configurações do banco de dados MySQL
 db_config = {
@@ -29,12 +36,8 @@ db_config = {
     'password': 'root123',
     'database': 'AudioDatabase'
 }
+app.config['UPLOAD_FOLDER'] = 'transcricoes' 
 
-def convert_to_flac(input_file):
-    audio = AudioSegment.from_file(input_file)
-    flac_filename = os.path.splitext(input_file)[0] + ".flac"
-    audio.export(flac_filename, format="flac")
-    return flac_filename
 
 @app.route('/')
 def listar_audios():
@@ -70,10 +73,6 @@ def listar_audios():
         return f"Erro ao listar áudios: {str(e)}"
 
 
-   
-
-    
-app.config['UPLOAD_FOLDER'] = 'transcricoes'  # Diretório onde os PDFs estão armazenados
 
 @app.route('/download/<filename>')
 def download_pdf(filename):
@@ -106,6 +105,7 @@ def obter_transcricao(audio_id):
 
 
 
+# rota para trancrição 
 @app.route('/transcrever/<int:audio_id>', methods=['GET'])
 def transcrever_audio(audio_id):
     try:
@@ -129,16 +129,47 @@ def transcrever_audio(audio_id):
         if audio_path.endswith('.gsm') or audio_path.endswith('.mp3'):
             audio_path = convert_to_flac(audio_path)
 
-        # Configura a transcrição
-        config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best, language_code="pt")
-        transcriber = aai.Transcriber()
 
-        # Transcreve o áudio
-        with open(audio_path, 'rb') as audio_file:
-            transcript = transcriber.transcribe(audio_file, config=config)
+        try:
 
-        # Formata a transcrição
-        transcricao_texto = transcript.text
+# divisão do audio 
+            audio_segment = AudioSegment.from_file(audio_path)
+            chunk_length_ms = 120000  # 2 minutos
+            chunks = [audio_segment[i:i + chunk_length_ms] for i in range(0, len(audio_segment), chunk_length_ms)]
+
+
+# transcrição 
+
+            recognizer = sr.Recognizer()
+            full_transcript = ""
+
+            for i, chunk in enumerate(chunks):
+                chunk_filename = save_chunk(chunk, i)
+                with sr.AudioFile(chunk_filename) as source:
+                    audio_data = recognizer.record(source)
+                texto = recognizer.recognize_google(audio_data, language='pt-BR')
+                full_transcript += texto + "\n"
+                os.remove(chunk_filename)
+
+            transcricao_texto = full_transcript
+        except Exception as e:
+
+# Se ocorrer um erro, usa o assemblyai Recognition
+
+            try:    
+                config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best, language_code="pt")
+                transcriber = aai.Transcriber()
+
+                # Transcreve o áudio
+                with open(audio_path, 'rb') as audio_file:
+                    transcript = transcriber.transcribe(audio_file, config=config)
+
+                # Formata a transcrição
+                transcricao_texto = transcript.text
+
+            except Exception as google_error:
+                        return jsonify({"error": f"Falha ao transcrever com ambos os serviços: {str(e)}, {str(google_error)}"}), 500
+            
 
         # Cria e salva o arquivo de transcrição .pdf
         transcricao_dir = 'transcricoes'
@@ -170,6 +201,8 @@ def transcrever_audio(audio_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+#rota para fazer a analise. 
 @app.route('/analisar/<int:audio_id>', methods=['GET'])
 def analisar_transcricao(audio_id):
     try:
@@ -189,13 +222,6 @@ def analisar_transcricao(audio_id):
         texto_transcricao = transcricao['transcription']
         prompt = f"faça um resumo da interação identificando o motivo do contato, atendente e o cliente: "
 
-        # Requisição à API externa a API do flowise
-       # api_url = "https://pxluthor-flowiseia.hf.space/api/v1/prediction/4abdc2d5-f2f0-4f27-a307-b0f4087de29f" # alterar para a rota do flowise
-       # headers = {"Content-Type": "application/json"}
-       # payload = {"question": f"{texto_transcricao}, {prompt}"}
-
-       # response = requests.post(api_url, json=payload, headers=headers)
-
 
         chat_completion = client.chat.completions.create(
             messages=[
@@ -208,15 +234,7 @@ def analisar_transcricao(audio_id):
         )
 
         analise = chat_completion.choices[0].message.content
-
-
-
-
-        #if response.status_code != 200:
-         #   return jsonify({"error": "Erro na requisição à API externa", "details": response.text}), response.status_code
-
-        #analise = response.json().get('text')  # pega o retorno da API 
-
+        
         # Insere o resultado da análise no banco de dados
         insert_query = """
         INSERT INTO AnalysisResults (audio_id, analysis) 
@@ -236,5 +254,21 @@ def analisar_transcricao(audio_id):
 
 
 
-#if __name__ == '__main__':
- #   app.run(debug=True)
+# --------- FUNÇÕES AUXILIARES ------------------------------
+
+def save_chunk(chunk, index, output_dir='chunks'):
+    os.makedirs(output_dir, exist_ok=True)
+    chunk_filename = os.path.join(output_dir, f"chunk_{index}.flac")
+    chunk.export(chunk_filename, format="flac")
+    return chunk_filename
+
+
+def convert_to_flac(input_file):
+    audio = AudioSegment.from_file(input_file)
+    flac_filename = os.path.splitext(input_file)[0] + ".flac"
+    audio.export(flac_filename, format="flac")
+    return flac_filename
+
+
+if __name__ == '__main__':
+    app.run(debug=True)
