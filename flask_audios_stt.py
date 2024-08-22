@@ -19,10 +19,10 @@ import assemblyai as aai
 
 app = Flask(__name__)
 
-GROQ_API_KEY = "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"
+GROQ_API_KEY = ""
 client = Groq(api_key=GROQ_API_KEY)
 
-ASSEMBLYAI_API_KEY = "0dd6e4398bb34fca86494411ff025f07" # colocar a chave
+ASSEMBLYAI_API_KEY = "" # colocar a chave
 aai.settings.api_key = ASSEMBLYAI_API_KEY
 
 # Configurações de upload de arquivo 
